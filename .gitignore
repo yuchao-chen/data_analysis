@@ -1,1 +1,4 @@
 virtualenv
+src/utils
+*/pycache*/
+*/*/__pycache__/

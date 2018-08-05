@@ -1,15 +1,21 @@
 # -*- coding: utf-8 -*-
 # alignment of two pinholearrays
 #
-import astropy.io.fits as fits
-import matplotlib.pyplot as plt
+import os
+from collections import defaultdict
+import math
+
+import pickle
+
 import numpy as np
 import scipy.ndimage as ndimage
-from thresholding import otsu_threshold
-import math
+import matplotlib.pyplot as plt
+
+import astropy.io.fits as fits
+
 import cv2
-import os
-import pickle
+
+from thresholding import otsu_threshold
 
 
 class PinholesBasedAlign():
@@ -167,6 +173,94 @@ class PinholesBasedAlign():
         return key, cluster, pos
 
     @classmethod
+    def _map_to_grid(self, points, threshold = 0.2):
+        grid = []
+        selected_angles = []
+
+        points_copy = points
+        # the pinholes are distributed in grid,
+        # there are two main gradients, m and -1/m
+        for index, p0 in enumerate(points_copy):
+
+            angles = defaultdict(list)
+
+            if index + 1 > len(points) - 1:
+                break
+            left_points = points[index+1:]
+
+            # perpendicular point pairs
+            pairs = []
+
+            for p1 in left_points:
+                angle = self._gradient(p0, p1)
+                not_found = True
+                for k in angles:
+                    # check the parallel points
+                    if abs(k - angle) > threshold:
+                        if abs(abs(k - angle) - 90.0) < threshold:
+                            pairs.append(k)
+                            pairs.append(angle)
+                        continue
+                    angles[k].append(p1)
+                    not_found = False
+                    break
+                if not_found:
+                    angles[angle].append(p1)
+
+            max_leng_angle = None
+            for k in angles:
+                if max_leng_angle is None:
+                    max_leng_angle = k
+                else:
+                    if len(angles[k]) > len(angles[max_leng_angle]):
+                        max_leng_angle = k
+            if max_leng_angle is not None:
+                selected_angles.append(max_leng_angle)
+                selected_points = angles[max_leng_angle]
+                selected_points.append(p0)
+                selected_points.sort(key = lambda p: math.sqrt((p0[0] - p[0])**2 + (p0[1] - p[1])**2))
+
+                grid.append(selected_points)
+                if max_leng_angle in pairs:
+                    index = pairs.index(max_leng_angle)
+                    if index % 2 == 1:
+                        index -= 1
+                    else:
+                        index += 1
+                    pp = angles[pairs[index]]
+                    selected_angles.append(pairs[index])
+                    pp.append(p0)
+                    pp.sort(key = lambda p: math.sqrt((p0[0] - p[0])**2 + (p0[1] - p[1])**2), reverse = True)
+                    for index, p in enumerate(pp):
+                        if p == p0:
+                            continue
+                        grid.insert(index, [p])
+
+            if len(grid) > 1:
+                break
+        # remove the duplicate points
+        for row in grid:
+            for e in row:
+                points_copy.remove(e)
+        not_found_points = []
+        for p0 in points_copy:
+            not_found = True
+            for index, s in enumerate(grid):
+                angle = self._gradient(s[0], p0)
+                if abs(angle - selected_angles[0]) < threshold:
+                    not_found = False
+                    grid[index].append(p0)
+                    break
+            if not_found:
+                not_found_points.append(p0)
+
+        longest_row = []
+        for g in grid:
+            if len(g) > len(longest_row):
+                longest_row = g
+        print(longest_row)
+
+    @classmethod
     def _match(self, points0, points1, threshold = 5):
 
         key0, cluster0, index0 = self._find_unique_point(points0, threshold)
@@ -206,3 +300,22 @@ class PinholesBasedAlign():
         if os.path.exists(filename):
             os.remove(filename)
         fits.writeto(filename, data)
+
+    @classmethod
+    def _gradient(self, p0, p1):
+        a = p0[0] - p1[0]
+        b = p0[1] - p1[1]
+        if a == 0:
+            return 90.0
+        return math.atan(b/a) * 180.0 / 3.14
+
+def main():
+    path = '/Users/yuchao/Documents/memo/20161130_magnetogram/MEMO/7TH_EXPERIMENT_FLAT_PINHOLES&FOCUS/PINHOLES.nosync/20180714/B1/031915/CENT/F_031915558.fits'
+    ref_image = fits.getdata(path)
+
+    p = PinholesBasedAlign()
+    pinholes = p.count_pinholes(ref_image)
+    grid = p._map_to_grid(pinholes, 0.5)
+
+if __name__ == '__main__':
+    main()
