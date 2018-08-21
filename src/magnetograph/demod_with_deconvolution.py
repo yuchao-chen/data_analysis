@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+from functools import reduce
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -35,7 +36,10 @@ def subpixel_shift(filename, shift, shifted_file_root):
     shifted_data = shifted_data.astype(np.uint16)
     # plt.imshow(shifted_data)
     # plt.show()
-    dir = os.path.join(shifted_file_root, os.path.basename(os.path.dirname(filename)))
+    subd0 = os.path.basename(os.path.dirname(filename))
+    subd1 = os.path.basename(os.path.dirname(os.path.dirname(filename)))
+    dir = os.path.join(shifted_file_root, subd1)
+    dir = os.path.join(dir, subd0)
     create_diectory(dir)
 
     shifted_filename = os.path.join(dir, os.path.basename(filename))
@@ -87,6 +91,19 @@ def deconvolution(b1_path, b2_path, b2_sum_filename, deconv_root, cropped_area =
     b2_sum_phase = b2_sum_freq / np.abs(b2_sum_freq)
     files0 = list_files_recursively(b1_path, '.fits')
     files1 = list_files_recursively(b2_path, '.fits')
+    files0.sort()
+    files1.sort()
+    tmp0 = []
+    tmp1 = []
+    for i in range(10):
+        tmp0.append(files0[i::300])
+        tmp1.append(files1[i::300])
+    files0 = reduce(lambda x,y :x+y ,tmp0)
+    files1 = reduce(lambda x,y :x+y ,tmp1)
+    files0.sort()
+    files1.sort()
+    for f in files0:
+        print(f)
     for i in range(len(files0) - 1):
         d0 = fits.getdata(files0[i])
         d1 = fits.getdata(files1[i])
@@ -103,6 +120,7 @@ def deconvolution(b1_path, b2_path, b2_sum_filename, deconv_root, cropped_area =
         d1_freq = np.fft.fftn(d1)
         d1_phase = d1_freq / np.abs(d1_freq)
         deconv_d0_freq = d0_freq * b2_sum_phase * d1_phase.conj() / np.abs(d1_phase)
+        # deconv_d0_freq = d0_freq * b2_sum_freq * d1_freq.conj() / np.abs(d1_freq)
         deconv_d0 = np.real(np.fft.ifftn(deconv_d0_freq))
         smoothed_deconv_d0 = ndimage.filters.gaussian_filter(deconv_d0, 0.4)
 
@@ -157,24 +175,30 @@ def demod(path, result_dir):
         plt.show()
 
 def demod_with_deconv(b1_path, b2_path, result_path):
-    registered_b1_path = os.path.join(result_path, 'REGISTERED\\B1')
-    registered_b2_path = os.path.join(result_path, 'REGISTERED\\B2')
+    registered_b1_path = 'G:\\20180807\\B1\\12717\\063007\\B0080_AFTER_ALIGNED_1'#os.path.join(result_path, 'REGISTERED\\B1')
+    registered_b2_path = 'G:\\20180807\\B2\\12717\\063002\\CENT_AFTER_ALIGNED_1'#os.path.join(result_path, 'REGISTERED\\B2')
 
-    # register(b2_path, b1_path, registered_b2_path, registered_b1_path)
-    b2_sum_filename = os.path.join(result_path, 'SUM.fits')
-    # sum(registered_b2_path, b2_sum_filename)
-    b1_decon_root = os.path.join(result_path, 'DECONV')
-    # deconvolution(registered_b1_path, registered_b2_path, b2_sum_filename, b1_decon_root, cropped_area=[250, 200, 1600, 1600])
-
-    b1_sum_root = os.path.join(result_path, 'SUM')
-    sum_all_files_in_current_directory(b1_decon_root, b1_sum_root)
-
-    b1_stokes_root = os.path.join(result_path, 'STOKES')
-    demod(b1_sum_root, b1_stokes_root)
+    register(b2_path, b1_path, registered_b2_path, registered_b1_path)
+    # b2_sum_filename = os.path.join(result_path, 'SUM.fits')
+    # # sum(registered_b2_path, b2_sum_filename)
+    # b1_decon_root = os.path.join(result_path, 'DECONV')
+    # # deconvolution(registered_b1_path, registered_b2_path, b2_sum_filename, b1_decon_root, cropped_area=[250, 200, 1600, 1600])
+    # # deconvolution(registered_b1_path, registered_b2_path, b2_sum_filename, b1_decon_root, cropped_area=[0, 0, 0, 0])
+    #
+    # b1_sum_root = os.path.join(result_path, 'SUM1')
+    # b2_sum_root = os.path.join(result_path, 'SUM2')
+    # sum_all_files_in_current_directory(registered_b1_path, b1_sum_root)
+    # sum_all_files_in_current_directory(registered_b2_path, b2_sum_root)
+    #
+    # deconvolution(b1_sum_root, b2_sum_root, b2_sum_filename, b1_decon_root,
+    #               cropped_area=[250, 200, 1600, 1600])
+    #
+    # b1_stokes_root = os.path.join(result_path, 'STOKES')
+    # demod(b1_sum_root, b1_stokes_root)
 
 def main():
-    b1_path = 'G:\\20180722\\B1\\QS\\055706\\R0080_AFTER_ALIGNED_0'
-    b2_path = 'G:\\20180722\\B2\\QS\\055706\\CENT_AFTER_ALIGNED_0'
+    b1_path = 'G:\\20180807\\B1\\12717\\063007\\B0080_AFTER_ALIGNED_0'
+    b2_path = 'G:\\20180807\\B2\\12717\\063002\\CENT_AFTER_ALIGNED_0'
     result_path = 'G:\\20180722\\B1\\QS\\055706\\DECONVOLUTION'
     demod_with_deconv(b1_path, b2_path, result_path)
 
